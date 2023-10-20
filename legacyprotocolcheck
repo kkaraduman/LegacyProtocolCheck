@@ -1,0 +1,171 @@
+
+$reportpath="C:\legacyprotocol.csv"
+Write-Host "Getting Domain Controller list" -ForegroundColor Green
+$dclist=Get-ADDomainController -Filter * | select hostname
+Write-Host "Legacy Protocol Check is starting" -ForegroundColor Green
+
+$result=foreach($dchost in $dclist.hostname) {
+Write-Host "SMBV1 checking is starting" -ForegroundColor Green
+
+$smbv1check=Invoke-Command -ComputerName $dchost -ScriptBlock {Get-SmbServerConfiguration |select EnableSMB1Protocol}
+if($smbv1check.EnableSMB1Protocol -eq $False){
+$smbv1status= "Not Installed"
+}
+else{
+$smbv1status= "Enabled"
+}
+Write-Host "NTLMV1 checking is starting" -ForegroundColor Green
+
+$lmcheck=Invoke-command -ComputerName $dchost -ScriptBlock {Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Lsa\" |select lmcompatibilitylevel} 
+if($lmcheck.lmcompatibilitylevel -eq 5){
+$lmstatus= "NTLMV1 Disable"
+}
+else {
+$lmstatus="NTLMV1 Enabled"
+}
+Write-Host "Digest checking is starting" -ForegroundColor Green
+
+$digestcheck = Invoke-command -ComputerName $dchost -ScriptBlock {Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WinRM\Client" | select AllowDigest}
+if($digestcheck.AllowDigest -eq 1) {
+$digeststatus="Disabled"
+
+}
+else {
+$digeststatus="Enabled"
+
+
+}
+
+
+Write-Host "TLS 1.0 and TLS 1.1 checking is starting" -ForegroundColor Green
+
+$scripttlsclient={
+
+$client1path="HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\Client"
+$client11path="HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\Client"
+
+
+
+$tls1clientenabled=Get-ItemProperty -Path $client1path -Name Enabled -ErrorAction SilentlyContinue | Select-Object  Enabled 
+$tls1clientdefaultdisabled=Get-ItemProperty -Path $client1path -Name DisabledByDefault -ErrorAction SilentlyContinue |Select-Object  DisabledByDefault 
+
+
+$tls11clientenabled=Get-ItemProperty -Path $client11path -Name Enabled -ErrorAction SilentlyContinue | Select-Object  Enabled 
+$tls11clientdefaultdisabled=Get-ItemProperty -Path $client11path -Name DisabledByDefault -ErrorAction SilentlyContinue |Select-Object  DisabledByDefault 
+
+
+if($tls1clientenabled.Enabled -eq 0) {$tls1clientenablevalue="Disabled"}
+elseif($tls1clientenabled.Enabled -eq 1) {$tls1clientenablevalue="Enable"}
+else{$tls1clientenablevalue="Null"}
+
+if($tls1clientdefaultdisabled.DisabledByDefault -eq 1) {$tls1clientDisabledByDefault="DefaultDisable"}
+elseif($tls1clientdefaultdisabled.DisabledByDefault -eq 0) {$tls1clientDisabledByDefault="Enabled"}
+else {$tls1clientDisabledByDefault="Null"}
+
+if($tls11clientenabled.Enabled -eq 0) {$tls11clientenablevalue="Disabled"}
+elseif($tls11clientenabled.Enabled -eq 1) {$tls11clientenablevalue="Enabled"}
+else{$tls11clientenablevalue="Null"}
+
+if($tls11clientdefaultdisabled.DisabledByDefault -eq 1) {$tlsclient11DisabledByDefault="DefaultDisable"}
+elseif($tls11clientdefaultdisabled.DisabledByDefault -eq 1) {$tlsclient11DisabledByDefault="Enabled"}
+else{$tlsclient11DisabledByDefault="Null"}
+
+
+
+      [PSCustomObject]@{
+            TLS1ClientEnabled = $tls1clientenablevalue
+            TLS1ClientDefaultDisabled = $tls1clientDisabledByDefault
+			TLS11ClientEnabled = $tls11clientenablevalue
+            TLS11ClientDefaultDisabled = $tlsclient11DisabledByDefault
+			
+        }
+        
+        
+
+
+}
+
+
+
+$scripttlsserver={
+
+$server1path="HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.0\server"
+$server11path="HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\TLS 1.1\server"
+
+
+
+$tls1serverenabled=Get-ItemProperty -Path $server1path -Name Enabled -ErrorAction SilentlyContinue | Select-Object  Enabled 
+$tls1serverdefaultdisabled=Get-ItemProperty -Path $server1path -Name DisabledByDefault -ErrorAction SilentlyContinue |Select-Object  DisabledByDefault 
+
+
+$tls11serverenabled=Get-ItemProperty -Path $server11path -Name Enabled -ErrorAction SilentlyContinue | Select-Object  Enabled 
+$tls11serverdefaultdisabled=Get-ItemProperty -Path $server11path -Name DisabledByDefault -ErrorAction SilentlyContinue |Select-Object  DisabledByDefault 
+
+
+if($tls1serverenabled.Enabled -eq 0) {$tls1serverenablevalue="Disabled"}
+elseif($tls1serverenabled.Enabled -eq 1) {$tls1serverenablevalue="Enable"}
+else{$tls1serverenablevalue="Null"}
+
+if($tls1serverdefaultdisabled.DisabledByDefault -eq 1) {$tls1serverDisabledByDefault="DefaultDisable"}
+elseif($tls1serverdefaultdisabled.DisabledByDefault -eq 0) {$tls1serverDisabledByDefault="Enabled"}
+else {$tls1serverDisabledByDefault="Null"}
+
+if($tls11serverenabled.Enabled -eq 0) {$tls11serverenablevalue="Disabled"}
+elseif($tls11serverenabled.Enabled -eq 1) {$tls11serverenablevalue="Enabled"}
+else{$tls11serverenablevalue="Null"}
+
+if($tls11serverdefaultdisabled.DisabledByDefault -eq 1) {$tlsserver11DisabledByDefault="DefaultDisable"}
+elseif($tls11serverdefaultdisabled.DisabledByDefault -eq 1) {$tlsserver11DisabledByDefault="Enabled"}
+else{$tlsserver11DisabledByDefault="Null"}
+
+
+
+      [PSCustomObject]@{
+            TLS1serverEnabled = $tls1serverenablevalue
+            TLS1serverDefaultDisabled = $tls1serverDisabledByDefault
+			TLS11serverEnabled = $tls11serverenablevalue
+            TLS11serverDefaultDisabled = $tlsserver11DisabledByDefault
+			
+        }
+        
+        
+
+
+}
+
+
+
+ $tlsservercheck=Invoke-command -ComputerName $dchost -ScriptBlock $scripttlsserver | select TLS1serverEnabled,TLS1serverDefaultDisabled,TLS11serverEnabled,TLS11serverDefaultDisabled
+ $tlsclientcheck=Invoke-command -ComputerName $dchost -ScriptBlock $scripttlsclient | select TLS1clientEnabled,TLS1clientDefaultDisabled,TLS11clientEnabled,TLS11clientDefaultDisabled
+
+
+
+[PsCustomObject]@{
+        Hostname=$dchost
+        Smbv1=$smbv1status
+        NTLMV1=$lmstatus
+        Digest=$digeststatus
+        TLS1clientEnabled=$tlsclientcheck.TLS1clientEnabled
+        TLS1clientDefaultDisabled=$tlsclientcheck.TLS1clientDefaultDisabled
+        TLS11clientEnabled=$tlsclientcheck.TLS11clientEnabled
+        TLS11clientDefaultDisabled=$tlsclientcheck.TLS11clientDefaultDisabled
+        TLS1serverEnabled=$tlsservercheck.TLS1serverEnabled
+        TLS1serverDefaultDisabled=$tlsservercheck.TLS1serverDefaultDisabled
+        TLS11serverEnabled=$tlsservercheck.TLS11serverEnabled
+        TLS11serverDefaultDisabled=$tlsservercheck.TLS11serverDefaultDisabled
+        
+
+}
+}
+
+
+Write-Host "Legacy Protocol Check completed" -ForegroundColor Green
+Write-Host "Legacy Protocol Check exporting to $reportpath" -ForegroundColor Green
+$result | Export-Csv -Path $reportpath -NoTypeInformation
+Write-Host "Legacy Protocol exported" -ForegroundColor Green
+
+Write-Host ' ------------------------------------------------------------' -ForegroundColor red -BackgroundColor white
+Write-Host ' ------------------------------------------------------------' -ForegroundColor red -BackgroundColor white
+Write-Host ' ---Created By Koray Can Karaduman--- ' -ForegroundColor red -BackgroundColor white
+Write-Host ' ------------------------------------------------------------' -ForegroundColor red -BackgroundColor white
+Write-Host ' ------------------------------------------------------------' -ForegroundColor red -BackgroundColor white
